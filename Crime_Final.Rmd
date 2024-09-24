@@ -1,0 +1,345 @@
+---
+title: "Crime"
+author: "Derek Schiltz, Khoa Cao, Taran Patel, Tianyi Xu"
+date: "2023-04-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(lubridate)
+source("../scripts/viridis.R")
+source("../scripts/ggprob.R")
+```
+
+
+
+```{r cars, include=FALSE}
+crime = read_csv("crime.csv") 
+```
+
+> Introduction:
+
+- According to the FBI, arson is defined as any willful or malicious burning or attempt to burn, with or without intent to defraud, a dwelling, house, public building, motor vehicle, aircraft, personal property of another, etc. Historically, among the types of crime in the United States, arson is the most costly one. Each year, an estimated 267,000 fires are attributed to arson, which result in $1.4 billion in property loss and cause over 2,000 injuries and 475 deaths.
+
+- Our question of interest is: For all “arson” crimes, is it significantly more likely for a weapon to be involved in the late evening compared to the early morning? Explained further, we intend to compare the proportion of late evening arson crimes that have a weapon involved with the proportion of early morning arson crimes that have a weapon involved. The motivation for examining the “weapon presence” variable is that this would elevate the level of the arson crime to a more dangerous degree, so we imagined it would be fitting and interesting to examine this variable. In addition, this is a categorical variable, thus allowing us to perform hypothesis testing involving proportions. 
+
+- The main point of the report is to discover the effect, if any, of the time of day on a perpetrator’s decision to commit arson either with a weapon or without one. We believe that the differences in weapon presence proportions between these two times of day will not provide exceedingly convincing evidence that the time of day has an effect on weapon involvement.
+
+> Background:
+
+
+- The data that we are going to use was collected by the Los Angeles Police Department as a record of crime incidents in Los Angeles dating back to 2020, which can be accessed at https://catalog.data.gov/dataset/crime-data-from-2020-to-present. This data is transcribed from original crime reports which an individual may report via 911.
+
+- The original data set is structured such that one observation (row of data) reflects one documented crime incident. Within each observation are several variables that specifically describe the crime description, location, timing, and details about the alleged perpetrator and alleged victim, if any. Given the magnitude of our data (almost 700,000 observations) and the varying relevance of each variable, we conducted rigorous cleaning to filter it down to 8 variables of interest.
+
+-  These eight variables are month of occurrence, time occurred (ex early morning), area (geographical), crime premise (ex parking lot), crime description, victim age, victim sex, and weapon presence. This project uses three of these variables: crime description, time occurred, and weapon presence.
+
+- After cleaning the data, we began to determine how to further filter the data in order to have a smaller number of observations to deal with. With a smaller number of observations, it became simpler to conduct statistical analysis resulting in relevant conclusions that can answer specific questions. Specifically, we decided to focus only on arson crimes. One of our data-cleaning techniques involved categorizing the time each crime occurred into discrete sections of the day (early morning, morning, afternoon, early evening, and late evening). Another one of our data-cleaning techniques involved adding a “Weapon Presence” variable which contains either “No Weapon” or “Weapon Present” for each crime observation. With these two variables, we were able to devise a specific question.
+
+
+- The reason we chose to focus on these variables involves some unusual factors within the unchosen variables. For example, the victim sex variable was sometimes missing or indicated NA, presumably because some crimes don’t have victims or some victims are unidentifiable after the crime occurs.
+
+- Our goal for the rest of the report will be to illustrate how we filtered the data down to our relevant variables, then to analyze and compare the rate of weapons being involved in an arson crime during two different times of day, which are late evening and early morning. 
+
+
+```{r, include=FALSE}
+
+crime = crime%>%
+  mutate(`DATE OCC` = as.character(`DATE OCC`))%>%
+  mutate(`DATE OCC` = str_sub(`DATE OCC`, 1, 2))%>%
+  mutate(`DATE OCC` = case_when(
+    `DATE OCC` == "01" ~ "January", 
+    `DATE OCC` == "02" ~ "February", 
+    `DATE OCC` == "03" ~ "March", 
+    `DATE OCC` == "04" ~ "April", 
+    `DATE OCC` == "05" ~ "May", 
+    `DATE OCC` == "06" ~ "June", 
+    `DATE OCC` == "07" ~ "July", 
+    `DATE OCC` == "08" ~ "August", 
+    `DATE OCC` == "09" ~ "September", 
+    `DATE OCC` == "10" ~ "October", 
+    `DATE OCC` == "11" ~ "November", 
+    `DATE OCC` == "12" ~ "December"
+    ))%>%
+  rename("Month Occurred" = `DATE OCC`)
+
+
+```
+
+
+```{r, include=FALSE}
+
+crime = crime%>%
+  rename("Time Occurred" = `TIME OCC`)%>%
+  mutate(`Time Occurred` = as.integer(`Time Occurred`)) %>% 
+  mutate(`Time Occurred` = case_when(
+    `Time Occurred` <= 400 ~ "Overnight", 
+    `Time Occurred`> 400 & `Time Occurred` <= 800 ~ "Early Morning", 
+    `Time Occurred`> 800 & `Time Occurred` <= 1200 ~ "Morning", 
+    `Time Occurred`> 1200 & `Time Occurred` <= 1600 ~ "Afternoon", 
+    `Time Occurred` > 1600 & `Time Occurred` <= 2000 ~ "Early Evening", 
+    `Time Occurred` > 2000 & `Time Occurred` <= 2400 ~ "Late Evening"
+  ))
+
+```
+
+
+```{r, include=FALSE}
+
+crime = crime%>%
+  rename("Area Occurred" = `AREA NAME`)%>%
+  rename("Crime Desc" = `Crm Cd Desc`)%>%
+  rename("Victim Sex" = `Vict Sex`)%>%
+  rename("Premis Occurred" = `Premis Desc`)
+
+```
+
+```{r, include=FALSE}
+crime = crime%>%
+  mutate(`Weapon Desc` = as.character(`Weapon Desc`))%>%
+  mutate(`Weapon Desc` = case_when(
+    is.na(`Weapon Desc`) ~ "No Weapon", 
+    !is.na(`Weapon Desc`) ~ "Weapon Present"
+  ))%>%
+  rename("Weapon Presence" = `Weapon Desc`)
+```
+
+```{r, include=FALSE}
+
+crime = crime%>%
+  mutate(`Victim Sex` = case_when(
+    `Victim Sex` == "M" ~ "Male", 
+    `Victim Sex` == "F" ~ "Female", 
+    `Victim Sex` == "X" ~ "Unknown"
+  ))
+
+```
+
+```{r, include=FALSE}
+crime = crime%>%
+  select(`Month Occurred`, `Time Occurred`, `Area Occurred`, `Crime Desc`, `Vict Age`, `Victim Sex`, `Premis Occurred`, `Weapon Presence`)
+```
+
+> Analysis:
+
+```{r, include=FALSE}
+crime1 = crime %>% 
+  filter(`Crime Desc` == "ARSON")%>%
+  count(`Time Occurred`)%>%
+  mutate(total = sum(n), prop = n / total )%>%
+  arrange(desc(prop))
+```
+
+```{r, include=FALSE}
+crime2 = crime%>%
+  filter(`Crime Desc` == "ARSON")%>%
+  group_by(`Time Occurred`)%>%
+  count(`Weapon Presence`)%>%
+  mutate(total = sum(n), prop = n / total )%>%
+  arrange(desc(prop))
+```
+
+
+```{r, include=FALSE}
+crime3 = crime2 %>% 
+  filter(`Weapon Presence` == "Weapon Present") %>% 
+  arrange(prop)
+```
+
+- To begin, we'll show a graph that represents the proportion of `Arson` crimes that occur by time of day.
+
+```{r, echo=FALSE}
+ggplot(crime1, aes(x = `Time Occurred`, y = prop))+
+  geom_col(fill = "blue") +
+  ylab("Proportion of All Arson Crimes") +
+  ggtitle("Arson Crime Occurrence by Time of Day")
+```
+
+- This graph shows that arson crimes occur all throughout the day, with the majority occuring overnight. With this demonstrated dispersion in crime occurrence throughout the day, we begin to dive deeper and combine this variable with another.
+
+- Next, we introduce the "Weapon Presence" variable, which tells us whether a weapon was present during each crime. The following graph shows the proportion of arson crimes with a weapon present for each time of day. Note that the following proportions don't add to 1; this is because each bar indicates the proportion of all crimes during just that time of day with a weapon present, not the proportion of all crimes during the day. 
+
+```{r, echo=FALSE}
+ggplot(crime3, aes(x = `Time Occurred`, y = prop))+
+  geom_col(fill = "green")+
+  ylab("Weapon Presence Proportion") +
+  ggtitle("Weapon Presence Proportion by Time of Day")
+```
+
+
+- Through this graph we can see that the extreme proportions (highest and lowest) are afternoon with the highest proportion and early Morning with the lowest proportion. We initially wanted to compare the weapon presence proportions for these two times of day, but we perceived these times of day as not being qualitatively different enough. To fix this, we replaced afternoon with late evening, the next most extreme time of day regarding weapon presence proportion.
+
+- With these two times of day, let's consider the weapon presence proportions for arson crimes during these times.
+
+```{r, include=FALSE}
+crime4 = crime2 %>% 
+  filter(`Time Occurred` == "Late Evening" | `Time Occurred` == "Early Morning")
+```
+
+```{r, echo=FALSE}
+ggplot(crime4, aes(x = `Weapon Presence`, y = prop))+
+  geom_col(fill = "red") +
+  facet_wrap(vars(`Time Occurred`)) +
+  ylab("Weapon Presence Proportion") + 
+  ggtitle("Weapon Presence Proportion by Selected Time of Day",
+          subtitle = "Early Morning and Late Evening")
+```
+
+- We are interested in the Weapon Present bars for each time of day.
+
+- It appears that the Weapon Present bar for the late evening time of day is larger than the Weapon Present bar for the early morning time of day. This motivates the creation of our inference procedure.
+
+- Since we're only concerned with the Weapon Present bars, let's compare the Weapon Presence proportion for just these two times of day.
+
+```{r, include=FALSE}
+crime5 = crime4 %>% 
+  filter(`Weapon Presence` == "Weapon Present")
+```
+
+```{r, echo=FALSE}
+ggplot(crime5, aes(x = `Time Occurred`, y = prop))+
+  geom_col(fill = "purple") +
+  ylab("Weapon Presence Proportion")+
+  ggtitle("Weapon Presence Proportion by Selected Time of Day",
+  subtitle = "Early Morning and Late Evening") 
+```
+
+
+- This graph highlights the difference in weapon presence proportion between these two times of day. These specific proportions motivate the inference procedure to follow. We are interested in determining whether the difference between these two proportions is significantly larger than 0.
+
+- Given this data and intention, we will conduct a one-sided z-test on the difference of these two proportions, which are specified in the data frame below.
+
+
+```{r, echo=FALSE}
+crime3 %>%
+  filter(`Time Occurred` == "Early Morning" | `Time Occurred` == "Late Evening")
+```
+
+- Independence and Normality Assumptions:
+
+  - We assume that `Arson` crimes that occur during the early morning have no effect on the `Arson` crimes that occur during the late evening, and that no arson crime within the same time of day has any effect on the others.
+
+  - The normality of the sampling distribution is satisfied if the following products listed in the np column of the data frame are all at least 10.
+
+```{r, echo=FALSE}
+crime_graph = crime%>%
+  filter(`Crime Desc` == "ARSON")%>%
+  group_by(`Time Occurred`)%>%
+  count(`Weapon Presence`)%>%
+  mutate(total = sum(n), prop = n / total )%>%
+  arrange(desc(prop))%>%
+  filter(`Time Occurred` == "Late Evening" | `Time Occurred` == "Early Morning")%>%
+  mutate(np = n*prop)
+
+crime_graph
+
+```
+
+- Having satisfied these assumptions, we can proceed with the test. For the following steps, let p1 = the proportion of arson crimes that occur during the late evening that have a weapon involved and let p2 = the proportion of arson crimes that occur during the early morning that have a weapon involved.
+
+> Hypothesis 
+
+- The null hypothesis is that the difference between the two weapon presence proportions is 0.
+- The alternate hypothesis is that the weapon presence proportion during the late evening is larger that the weapon presence proportion during the day.
+
+> Model
+
+- Since we have satisfied our normality condition, the model for our differences data follows a normal distribution.
+
+> Sampling Distribution
+
+- Given that the null hypothesis is true and there is no difference between the two proportions, the sampling distribution is normal with mean 0 and standard deviation that is calculated using 
+
+$$
+\text{SE}(\hat{p}_1 - \hat{p}_2) =
+  \sqrt{ \frac{p_1(1-p_1)}{n_1} + \frac{p_2(1-p_2)}{n_2} }
+$$
+where p1 and p2 are both the pooled p value. We must pool because our null hypothesis is that there is no difference between these proportions, so it is as if they come from the same population.
+
+The following shows the pooled p value calculation.
+
+$$
+\bar{p} = \frac{X_1 + X_2}{n_1 + n_2} = \frac{100 + 75}{320 + 290} \doteq 0.2868852
+$$
+Therefore, the standard error is calculated as 
+
+$$
+\text{SE}(\hat{p}_1 - \hat{p}_2) =
+  \sqrt{ \frac{\bar{p}(1-\bar{p})}{320} + \frac{\bar{p}(1-\bar{p})}{290} }
+$$
+which results in 0.036671168
+
+$$
+\hat{p}_1 = 100/320 = 0.3125
+$$
+$$
+\hat{p}_2 = 75/290 = 0.2586
+$$
+The following shows the computation of the z test statistic.
+
+
+$$
+ \frac{\hat{p}_1-\hat{p}_2}{\text{SE}(\hat{p}_1 - \hat{p}_2)} = 1.469255
+$$
+
+> p-value
+
+- The p-value is the red area under the curve to the right of $$\hat{p}_1-\hat{p}_2$$
+
+
+- This normal curve has mean 0 and standard deviation calculated using an equation listed above.
+
+```{r, include=FALSE}
+pooled_p = ((100 + 75) / (320+290))
+standard_error = sqrt((1 / 320 + 1 / 290) * pooled_p * (1 - pooled_p))
+p1_hat = 100/320
+p2_hat = 75/290
+ 
+z = (p1_hat - p2_hat) / standard_error
+p_value = 1 - pnorm(z)
+p_value
+```
+
+
+```{r, echo=FALSE}
+gnorm(mu = 0, sigma = standard_error) +
+  geom_norm_fill(mu = 0, sigma=standard_error, a = (p1_hat - p2_hat), b = NULL) +
+  theme_minimal()
+```
+
+$$
+P (X \geq 0.0539) = P(Z \geq 1.469255) = 0.07088177
+$$
+
+To summarize this process, here is a table with relevant variables and statistics.
+
+```{r, echo=FALSE}
+
+summary_table = tibble(
+  statistic = c("p1", "p2", "pooled p", "p1-p2", "se(p1-p2)", "z stat", "p"),
+  description = c("weapon presence proportion for late evening arson crimes", "weapon presence proportion for early morning arson crimes", "pooled weapon presence proportion", "difference in sample proportions", "standard error for the difference in sample proportions", "z test statistic", "p value of one sided z test"),
+  value = c(p1_hat, p2_hat, pooled_p, p1_hat-p2_hat, standard_error, z, p_value)
+  
+)
+
+summary_table
+
+```
+
+
+
+
+> Discussion:
+
+- In conclusion, our analysis did not provide sufficient statistical evidence (p-value = 0.071, one-sided test) to suggest that arson crime with weapon presence is more likely to happen during the late evening compared to the early morning. The observed proportions for arson crime with weapon presence during the late evening and early morning were 0.312 and 0.259, with sample sizes of 320 and 290, respectively. Our calculated p-value of 0.07088177 is higher than the common significance threshold of 0.05, indicating that we cannot reject the null hypothesis in our z-test on the difference in sample proportions. In simpler terms, the difference between these two proportions is not large enough to suggest a significant difference. However, it is worth noting that the p-value is close enough such that if we increase the threshold to 0.1 or increase the sample sizes, the null hypothesis could be rejected. Therefore, our project has identified a possible conclusion from the data that could rise to the level of statistical significance given further analysis and testing.
+
+- One key limitation of this study is that the data collection was not random. The dataset was derived from LAPD crime records, which only account for reported crimes. Thus, the data may not accurately represent the actual proportions of arson crimes with weapons occurring during the late evening and early morning in the whole population.
+
+- To further validate our findings, we could conduct simulations or additional bootstrap analyses to verify the consistency of our results with the data to simulate the conditions of random sampling. For additional questions, it may also be valuable to explore other factors and their relationship with arson crime, such as the day of the week, the month of the year, or the location of the crime. Or we could compare weapon presence for different times of day for other crimes in order to see if we could find a significant result for another crime. Lastly, alternative statistical models, such as the binomial distribution model, could be used to determine and verify whether our findings remain consistent under different assumptions, either calculated using equations or through simulations.
+
+
+
+
